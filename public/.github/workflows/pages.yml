@@ -1,0 +1,52 @@
+name: Deploy static content to Pages
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+env:
+  FOLDER: "public"
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preflight – ensure folder exists
+        run: |
+          test -d ${FOLDER:-public} || (echo "Folder missing" && exit 1)
+          test -f ${FOLDER:-public}/index.html || (echo "index.html missing" && exit 1)
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.FOLDER || 'public' }}
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Post-deploy smoke test
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          echo "Deployed to: $URL"
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          echo "HTTP: $code"
+          [[ "$code" == "200" || "$code" == "301" ]] || (echo "Smoke test failed" && exit 1)
